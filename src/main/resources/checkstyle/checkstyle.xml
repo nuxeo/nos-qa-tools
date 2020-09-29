@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+  "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
+  "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<module name="Checker">
+  <property name="charset" value="UTF-8"/>
+
+  <!-- Properties Files -->
+  <module name="UniqueProperties">
+    <property name="fileExtensions" value="properties"/>
+  </module>
+
+  <!-- Java Files -->
+  <module name="TreeWalker">
+    <!-- File Headers -->
+    <module name="Regexp">
+      <property name="format" value="\A\/\*$\r?\n \* \(C\) Copyright \d{4}(-\d{4})? Nuxeo (SA )?\(http:\/\/nuxeo\.com\/\)\.$\r?\n \* This is unpublished proprietary source code of Nuxeo SA\. All rights reserved\.$\r?\n \* Notice of copyright on this source code does not indicate publication\.$\r?\n \*$\r?\n \* Contributors:$" />
+    </module>
+
+    <!-- Class Design -->
+    <module name="OneTopLevelClass"/>
+
+    <!-- Coding -->
+    <module name="OneStatementPerLine"/>
+
+    <!-- Imports -->
+    <module name="AvoidStarImport"/>
+    <module name="RedundantImport"/>
+    <module name="UnusedImports"/>
+    <module name="CustomImportOrder">
+      <property name="customImportOrderRules" value="STATIC###STANDARD_JAVA_PACKAGE###SPECIAL_IMPORTS###THIRD_PARTY_PACKAGE"/>
+      <property name="specialImportsRegExp" value="^org\."/>
+      <property name="standardPackageRegExp" value="^(java|javax)\."/>
+    </module>
+
+    <!-- Miscellaneous -->
+    <module name="ArrayTypeStyle"/>
+    <module name="OuterTypeFilename"/>
+    <module name="UpperEll"/>
+
+    <!-- Modifiers -->
+    <module name="ModifierOrder"/>
+    <module name="RedundantModifier"/>
+
+    <!-- GWT JSNI methods -->
+    <!--
+      GWT JSNI methods must use different lines for the method
+      declaration and method logic. It helps Eclipse formatter to
+      formats the code block correctly.
+
+      * Passed:
+
+            public final native int getX()
+            /*-{
+                return this.x;
+            }-*/;
+
+      * Failed:
+
+            public final native int getX() /*-{
+                return this.x;
+            }-*/;
+    -->
+    <module name="RegexpSinglelineJava">
+      <!--
+        A JavaScript Native Interface (JSNI) method contains the
+        `native` keyword, and parentheses `()` as other Java methods.
+        Explanation about the regex:
+          * `[\s\w]+`: start with whitespaces or word chars
+          * `( native )`: follow by keyword `native` (group 1)
+          * `[\s\w]+`: follow by whitespaces or word chars
+          * `(\([\s\w]*\))`: follow by method, with or without input
+            params (group 2)
+          * `\s*`: follow by optional whitespaces
+          * `\/\*-\{`: follow by JSNI method start-sign `/*-{`
+            (group 3)
+       -->
+      <property name="format" value="[\s\w]+( native )[\s\w]+(\([\s\w]*\))\s*(\/\*-\{)"/>
+      <property name="message" value="Start JSNI method body in a separated line."/>
+    </module>
+  </module>
+</module>

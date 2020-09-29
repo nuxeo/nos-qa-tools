@@ -1,0 +1,13 @@
+.project
+.classpath
+.factorypath
+.cache-main
+.cache-tests
+.settings/
+
+# IntelliJ IDEA
+.idea
+*.iml
+
+# Maven
+target/
