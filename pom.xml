@@ -1,5 +1,5 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.nuxeo.nos</groupId>
   <artifactId>nos-qa-tools</artifactId>
@@ -8,4 +8,97 @@
   - Checkstyle configuration
   </description>
   <version>1.1-SNAPSHOT</version>
+  <build>
+    <pluginManagement>
+      <plugins>
+	<plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.1.2</version>
+	</plugin>
+        <plugin>
+          <artifactId>maven-antrun-plugin</artifactId>
+          <version>1.8</version>
+        </plugin>
+        <plugin>
+          <groupId>fr.brouillard.oss</groupId>
+          <artifactId>jgitver-maven-plugin</artifactId>
+          <version>1.5.1</version>
+        </plugin>
+        <plugin>
+          <groupId>de.qaware.maven</groupId>
+          <artifactId>go-offline-maven-plugin</artifactId>
+          <version>1.2.6</version>
+	</plugin>
+      </plugins>
+    </pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>de.qaware.maven</groupId>
+        <artifactId>go-offline-maven-plugin</artifactId>
+          <configuration>
+            <dynamicDependencies>
+              <DynamicDependency>
+                <groupId>org.codehaus.plexus</groupId>
+                <artifactId>plexus-utils</artifactId>
+                <version>1.1</version>
+                <repositoryType>PLUGIN</repositoryType>
+              </DynamicDependency>
+              <DynamicDependency>
+                <groupId>org.codehaus.plexus</groupId>
+                <artifactId>plexus-utils</artifactId>
+                <version>1.1</version>
+                <repositoryType>PLUGIN</repositoryType>
+              </DynamicDependency>
+              <DynamicDependency>
+                <groupId>org.apache.maven.surefire</groupId>
+                <artifactId>surefire-junit47</artifactId>
+                <version>3.0.0-M2</version>
+                <repositoryType>PLUGIN</repositoryType>
+              </DynamicDependency>
+              <DynamicDependency>
+                <groupId>org.apache.maven.surefire</groupId>
+                <artifactId>surefire-junit4</artifactId>
+                <version>3.0.0-M2</version>
+                <repositoryType>PLUGIN</repositoryType>
+              </DynamicDependency>
+            </dynamicDependencies>
+          </configuration>
+      </plugin>
+      <plugin>
+	<artifactId>maven-antrun-plugin</artifactId>
+	<executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <echo>used version: ${jgitver.used_version}</echo>
+                <echo>version calculated: ${jgitver.calculated_version}</echo>
+                <echo>dirty: ${jgitver.dirty}</echo>
+                <echo>head_committer_name: ${jgitver.head_committer_name}</echo>
+                <echo>head_commiter_email: ${jgitver.head_commiter_email}</echo>
+                <echo>head_commit_datetime: ${jgitver.head_commit_datetime}</echo>
+                <echo>git_sha1_full: ${jgitver.git_sha1_full}</echo>
+                <echo>git_sha1_8: ${jgitver.git_sha1_8}</echo>
+                <echo>branch_name: ${jgitver.branch_name}</echo>
+                <echo>head_tags: ${jgitver.head_tags}</echo>
+                <echo>head_annotated_tags: ${jgitver.head_annotated_tags}</echo>
+                <echo>head_lightweight_tags: ${jgitver.head_lightweight_tags}</echo>
+                <echo>base_tag: ${jgitver.base_tag}</echo>
+                <echo>all_tags: ${jgitver.all_tags}</echo>
+                <echo>all_annotated_tags: ${jgitver.all_annotated_tags}</echo>
+                <echo>all_lightweight_tags: ${jgitver.all_lightweight_tags}</echo>
+                <echo>all_version_tags: ${jgitver.all_version_tags}</echo>
+                <echo>all_version_annotated_tags: ${jgitver.all_version_annotated_tags}</echo>
+                <echo>all_version_lightweight_tags: ${jgitver.all_version_lightweight_tags}</echo>
+              </target>
+            </configuration>
+          </execution>
+	</executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
