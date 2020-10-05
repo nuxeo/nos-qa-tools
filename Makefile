@@ -14,10 +14,6 @@ noop: ; @:
 
 workspace: ## setup workspace, including npm and environment variables
 
-
-maven-project-version:
-	@echo $(maven-project-version)
-
 maven-clean: ## clean target folders
 maven-clean:
 	mvn clean
