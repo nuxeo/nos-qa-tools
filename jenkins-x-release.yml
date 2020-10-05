@@ -11,4 +11,4 @@ pipelineConfig:
         - name: make-cache-rules
           sh: 'make noop'
         - name: create-version-file
-          sh: 'jx step next-version --version=$(make maven-project-version) --tag'
+          sh: 'jx step next-version --version=$(make maven-project-version)'
