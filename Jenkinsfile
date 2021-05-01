@@ -17,19 +17,78 @@
  *     Gildas Lefevre <glefevre@nuxeo.com>
  */
 
-void setBuildStatus(context, message, state) {
-    step([
-        $class: 'GitHubCommitStatusSetter',
-        contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: context],
-        errorHandlers: [[$class: 'ChangingBuildStatusErrorHandler', result: 'UNSTABLE']],
-        reposSource: [$class: 'ManuallyEnteredRepositorySource', url: env.GIT_URL],
-        statusResultSource: [$class: 'ConditionalStatusResultSource', results: [[$class: 'AnyBuildResult', message: message, state: state]]]
-    ]);
+def workspace = env.JOB_NAME.replaceAll('/','-').toLowerCase()
+
+podTemplate(label: 'nos-workspace-bootstrap', cloud: 'kubernetes', yaml: '''
+metadata:
+  labels:
+    jenkins.io/kind: build-pod
+spec:
+  serviceAccount: jenkins-operator-master
+  volumes:
+  - name: workspace-volume
+    emptyDir: {}
+  - name: maven-settings
+    secret:
+      secretName: jenkins-maven-settings
+  containers:
+  - name: jnlp
+    env:
+      - name: "JENKINS_TUNNEL"
+        value: "jenkins-operator-slave-master:50000"
+  - name: jx-base
+    env:
+      - name: "XDG_CONFIG_HOME"
+        value: "/home/jenkins"
+    image: gcr.io/jenkinsxio/builder-maven:latest
+    args:
+    - cat
+    command:
+    - /bin/sh
+    - -c
+    workingDir: /home/jenkins/agent
+    securityContext:
+      privileged: true
+    tty: true
+    resources:
+      requests:
+        cpu: .5
+        memory: .5Gi
+      limits:
+    volumeMounts:
+      - mountPath: /home/jenkins/.m2
+        name: maven-settings
+''') {
+    node('nos-workspace-bootstrap') {
+        stage('Claim workspace') {
+            container('jnlp') {
+                script {
+                    def scmvars = checkout scm: [
+                        $class: 'GitSCM',
+                        branches: scm.branches,
+                        doGenerateSubmoduleConfigurations: false,
+                        extensions: [[$class: 'SubmoduleOption',
+                                      disableSubmodules: false,
+                                      parentCredentials: true,
+                                      recursiveSubmodules: true,
+                                      reference: '',
+                                      trackingSubmodules: false]],
+                        submoduleCfg: [],
+                        userRemoteConfigs: scm.userRemoteConfigs
+                    ]
+                    println "scmvars: ${scmvars}"
+                    scmvars.each {key, val ->
+                        env.setProperty(key, val)
+                    }
+                }
+            }
+            container('jx-base') {
+                sh "make jenkins-slave~apply pipeline=resources version-branch=${BRANCH_NAME}"
+                env.setProperty('POD_TEMPLATE', readFile(file: ".local/var/deploy/slave/${workspace}-builder-pod.yaml"))
+            }
+        }
+    }
 }
-
-def pullRequestLabels = []
-
-def containerScript = ""
 
 pipeline {
     options {
@@ -40,88 +99,81 @@ pipeline {
     agent {
         kubernetes {
             yamlMergeStrategy override()
-            yamlFile 'Jenkinsfile-pod.yaml'
+            workspaceVolume persistentVolumeClaimWorkspaceVolume(claimName: workspace+"-workspace", readOnly: false)
+            yaml "${POD_TEMPLATE}"
+            defaultContainer 'builder'
         }
     }
     stages {
         stage('Prepare workspace') {
             steps {
-                container('maven') {
-                    script {
-                        def scmvars = checkout scm: [
-                            $class: 'GitSCM',
-                            branches: scm.branches,
-                            doGenerateSubmoduleConfigurations: false,
-                            extensions: [[$class: 'SubmoduleOption',
-                                          disableSubmodules: false,
-                                          parentCredentials: true,
-                                          recursiveSubmodules: true,
-                                          reference: '',
-                                          trackingSubmodules: false],
-                                         [$class: 'LocalBranch', localBranch: '**']],
-                            submoduleCfg: [],
-                            userRemoteConfigs: scm.userRemoteConfigs
-                        ]
-                        scmvars.each {key, val ->
-                            env.setProperty(key, val)
-                        }
-                    }
-                    sh 'make noop'
-                }
+                checkout scm: [
+                    $class: 'GitSCM',
+                    branches: scm.branches,
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [[$class: 'SubmoduleOption',
+                                  disableSubmodules: false,
+                                  parentCredentials: true,
+                                  recursiveSubmodules: true,
+                                  reference: '',
+                                  trackingSubmodules: false],
+                                 [$class: 'LocalBranch', localBranch: '**']],
+                    submoduleCfg: [],
+                    userRemoteConfigs: scm.userRemoteConfigs
+                ]
+                sh "make jenkins-slave~apply pipeline=resources version-branch=${BRANCH_NAME} dry-run=client"
             }
         }
         stage('Build maven repository') {
             steps {
-                setBuildStatus('maven-repository', 'build maven repository', 'PENDING')
-                container('maven') {
+                gitStatusWrapper(credentialsId: 'tekton-git',
+                                 description: 'build maven repository',
+                                 failureDescription: 'build maven repository',
+                                 gitHubContext: 'maven-repository',
+                                 successDescription: 'build maven repository') {
                     sh 'make maven-repository'
                 }
             }
-            post {
-                success {
-                    setBuildStatus('maven-repository', 'build maven repository', 'SUCCESS')
-                }
-                failure {
-                    setBuildStatus('maven-repository', 'build maven repository', 'FAILURE')
-                }
-            }
         }
+        // stage('Unit test reports') {
+        //     steps {
+        //         gitStatusWrapper(credentialsId: 'tekton-git',
+        //                          gitHubContext: 'unit-test-reports',
+        //                          description: 'run unit tests and generate reports',
+        //                          successDescription: 'run unit tests and generate reports',
+        //                          failureDescription: 'run unit tests and generate reports') {
+        //             catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+        //                 sh 'make unit-test-reports'
+        //             }
+        //         }
+        //     }
+        //     post {
+        //         always {
+        //             junit testResults: '**/target/surefire-reports/*.xml, **/target/failsafe-reports/*.xml'
+        //         }
+        //     }
+        // }
         stage('Build maven artifacts') {
             steps {
-                setBuildStatus('maven-packages', 'build nodejs and install maven packages', 'PENDING')
-                container('maven') {
-                    sh 'make maven-packages'
-                }
-            }
-            post {
-                success {
-                    setBuildStatus('maven-packages', 'build nodejs and install maven packages', 'SUCCESS')
-                }
-                failure {
-                    setBuildStatus('maven-packages', 'build nodejs and install maven packages', 'FAILURE')
-                }
-            }
-        }
-        stage('Publish nexus maven packages') {
-            steps {
-                setBuildStatus('nexus-maven-packages', 'nexus maven packages', 'PENDING')
-                container('maven') {
-                    sh 'make nexus-maven-packages'
-                }
-            }
-            post {
-                success {
-                    setBuildStatus('nexus-maven-packages', 'nexus maven packages', 'SUCCESS')
-                }
-                failure {
-                    setBuildStatus('nexus-maven-packages', 'nexus maven packages', 'FAILURE')
+                gitStatusWrapper(credentialsId: 'tekton-git',
+                                 gitHubContext: 'maven-packages',
+                                 description: 'build and deploy maven packages',
+                                 successDescription: 'build and deploy maven packages',
+                                 failureDescription: 'build and deploy maven packages') {
+                    sh 'make maven-packages-and-deploy'
                 }
             }
         }
     }
+    post {
+        failure {
+             sh "make jenkins-slave~delete jenkins-slave~apply pipeline=snapshot"
+        }
+        always {
+            sh "make jenkins-slave~delete pipeline=resources"
+        }
+    }
 }
-
-
 
 // Local Variables:
 // indent-tabs-mode: nil

@@ -6,6 +6,7 @@ top-dir:=$(this-dir)
 #SHELL=$(warning Building $@$(if $<, (from $<))$(if $?, ($? newer)))$(TIME) $(__ORIGINAL_SHELL) -x
 
 include make.d/workspace.mk
+include make.d/jenkins.mk
 
 # stages targets
 
@@ -24,10 +25,10 @@ maven-repository:
 
 maven-packages: ## compile java and node sources, build and install packages locally
 maven-packages:
-	mvn -V -B -o -nsu -T0.8C -DskipTests install
+	mvn -V -B -o -nsu -T0.8C -DskipTests deploy
 
-nexus-maven-packages: ## deploy maven packages in nexus
-	mvn -V -B -nsu deploy
+maven-packages-and-deploy: ## deploy maven packages in nexus
+	mvn -V -B -nsu -T0.8C deploy -DskipTest
 
 unit-test-reports: ## run unit tests and generate reports
 unit-test-reports:
