@@ -10,9 +10,18 @@ spec:
     rerun_command: "/retest"
     source: "jenkins-trigger.yaml"
   postsubmits:
+  - name: master
+    context: "master"
+    source: "jenkins-trigger.yaml"
+    branches:
+    - ^master$
   - name: release
     context: "release"
     source: "jenkins-trigger.yaml"
     branches:
-    - main
-    - master
+    - ^v[0-9]+.[0-9]+.[0-9]+$
+  - name: maintenance
+    context: "maintenance"
+    source: "jenkins-trigger.yaml"
+    branches:
+    - ^[0-9]+(.[0-9]+){0,2}-maintenance$

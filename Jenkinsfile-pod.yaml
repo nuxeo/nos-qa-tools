@@ -5,44 +5,88 @@ metadata:
     jenkins: slave
     resource: pod
     usage: build
+  name: nos-qa-tools-builder
 spec:
-  nodeSelector:
-    dedicated: jenkins-x-builder
-  tolerations:
-  - effect: NoSchedule
-    key: dedicated
-    operator: Equal
-    value: jenkins-x-builder
-  initContainers:
-  - command: [ 'sh', '-c', 'chmod 777 /home/jenkins/agent']
-    image: busybox:1.31.1
-    name: home-jenkins-perms
-    volumeMounts:
-    - mountPath: /home/jenkins/agent
-      name: workspace-volume
   containers:
-  - name: maven
+  - args:
+    - |
+      mkdir -p /data/upper
+      mkdir -p /data/work
+      mount -t overlay -o lowerdir=/data/lower,upperdir=/data/upper,workdir=/data/work overlay /home/jenkins/.m2
+      chown -R 1000:412 /home/jenkins/.m2
+      tail -f /dev/null
+    command:
+    - /bin/ash
+    - -e
+    - -x
+    - -c
+    - --
+    image: busybox:glibc
+    lifecycle:
+      preStop:
+        exec:
+          command:
+          - umount
+          - /home/jenkins/.m2
+    name: m2-settings-overlay
+    resources:
+      requests:
+        cpu: 0.1
+        memory: 32Mi
     securityContext:
-      runAsUser: 1000
-      fsGroup: 412    # Group ID of docker group on k8s nodes.
       privileged: true
+      runAsUser: 0
+    volumeMounts:
+    - mountPath: /data
+      name: m2-settings-overlay-data
+    - mountPath: /data/lower
+      name: jenkins-m2-settings
+    - mountPath: /home/jenkins/.m2
+      mountPropagation: Bidirectional
+      name: m2-settings-overlay
+  - name: maven
     env:
     - name: MAVEN_OPTS
       value: -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
-    - name: DOCKER_CONFIG
-      value: /home/jenkins/.docker/
-    - name: DOCKER_REGISTRY
+    - name: M2_SETTINGS
       valueFrom:
-        configMapKeyRef:
-          name: jenkins-x-docker-registry
-          key: docker.registry
-    - name: DOCKER_REGISTRY_ORG
+        secretKeyRef:
+          key: M2_SETTINGS
+          name: nuxeo-nos-slave-boot-builder
+    - name: M2_SETTINGS_SECURITY
       valueFrom:
-        configMapKeyRef:
-          key: docker.org
-          name: jenkins-x-docker-registry
-    - name: NPM_CONFIG_REGISTRY
-      value: http://nexus/repository/npm-group/
+        secretKeyRef:
+          key: M2_SETTINGS_SECURITY
+          name: nuxeo-nos-slave-boot-builder
+    - name: M2_LOCAL_REPOSITORY
+      value: /home/jenkins/agent/m2-repository
+    - name: M2_TEAM_URL
+      value: http://nexus.jx.svc.cluster.local
+    - name: M2_CREDENTIALS_TEAM_USERNAME
+      valueFrom:
+        secretKeyRef:
+          key: M2_CREDENTIALS_TEAM_USERNAME
+          name: nuxeo-nos-slave-boot-builder
+    - name: M2_CREDENTIALS_TEAM_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: M2_CREDENTIALS_TEAM_PASSWORD
+          name: nuxeo-nos-slave-boot-builder
+    - name: M2_PACKAGES_URL
+      valueFrom:
+        secretKeyRef:
+          key: M2_TEAM_URL
+          name: nuxeo-nos-slave-boot-builder
+    - name: M2_CREDENTIALS_PACKAGES_USERNAME
+      valueFrom:
+        secretKeyRef:
+          key: M2_CREDENTIALS_PACKAGES_USERNAME
+          name: nuxeo-nos-slave-boot-builder
+    - name: M2_CREDENTIALS_PACKAGES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: M2_CREDENTIALS_PACKAGES_PASSWORD
+          name: nuxeo-nos-slave-boot-builder
     - name: GIT_AUTHOR_EMAIL
       value: nos+jx@nuxeo.com
     - name: GIT_COMMITTER_EMAIL
@@ -73,44 +117,22 @@ spec:
       valueFrom:
         fieldRef:
           fieldPath: metadata.namespace
-    image: gcr.io/build-jx-prod/jxlabs-nos-master/nos-builder-java8:0.0.13
+    image: gcr.io/build-jx-prod/nuxeo/nos-builder-java8:latest
     resources:
-      limits:
-        cpu: "6"
-        memory: 8Gi
       requests:
-        cpu: "4"
-        memory: 6Gi
+        cpu: "1"
+        memory: 1Gi
     tty: true
     volumeMounts:
-    - mountPath: /home/jenkins/.docker
-      name: jenkins-docker-config
     - mountPath: /home/jenkins/.m2
-      name: maven-settings
-    - mountPath: /home/jenkins/.gnupg
-      name: gpg-config
-    - mountPath: /var/run/docker.sock
-      name: docker-sock
+      mountPropagation: HostToContainer
+      name: m2-settings-overlay
     - mountPath: /home/jenkins/agent
       name: workspace-volume
-  - name: container-build
-    image: gcr.io/kaniko-project/executor:debug-v0.24.0
-    command: [ "tail", "-f", "/dev/null" ]
-    env:
-    - name: GOOGLE_APPLICATION_CREDENTIALS
-      value: /secrets/kaniko/kaniko-secret.json
-    volumeMounts:
-    - mountPath: /secrets
-      name: kaniko-secret
-    - mountPath: /kaniko/.docker
-      name: kaniko-docker-config
-    - mountPath: /home/jenkins/agent
-      name: workspace-volume
+    - mountPath: /var/run/secrets/git-credentials
+      name: git-credentials
   - name: jnlp
     image: jenkins/jnlp-slave
-    securityContext:
-      runAsUser: 1000
-      allowPrivilegeEscalation: false
     env:
       - name: "JENKINS_TUNNEL"
         value: "jenkins-operator-slave-master:50000"
@@ -119,28 +141,25 @@ spec:
       name: workspace-volume
   priority: 0
   restartPolicy: Never
-  serviceAccountName: tekton-bot
+  serviceAccountName: builder
+  securityContext:
+    runAsUser: 1000
+    fsGroup: 412    # Group ID of docker group on k8s nodes.
   volumes:
-  - name: workspace-volume
-    emptyDir: {}
-  - name: kaniko-secret
+  - name: git-credentials
     secret:
-      secretName: kaniko-secret
+      secretName: pipeline-git-github
+  - name: jenkins-m2-settings
+    secret:
       items:
-        - key: kaniko-secret
-          path: kaniko/kaniko-secret.json
-  - name: jenkins-docker-config
-    secret:
-      secretName: jenkins-docker-cfg
-  - name: kaniko-docker-config
-    secret:
-      secretName: kaniko-docker-cfg
-  - name: gpg-config
-    secret:
-      secretName: jenkins-release-gpg
-  - name: maven-settings
-    secret:
-      secretName: jenkins-maven-settings
-  - hostPath:
-      path: /var/run/docker.sock
-    name: docker-sock
+      - key: M2_SETTINGS_SECURITY
+        path: settings-security.xml
+      - key: M2_SETTINGS
+        path: settings.xml
+      secretName: nuxeo-nos-slave-boot-builder
+  - emptyDir: {}
+    name: m2-settings-overlay
+  - emptyDir: {}
+    name: m2-settings-overlay-data
+  - emptyDir: {}
+    name: workspace-volume

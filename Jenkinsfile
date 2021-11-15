@@ -17,78 +17,8 @@
  *     Gildas Lefevre <glefevre@nuxeo.com>
  */
 
-def workspace = env.JOB_NAME.replaceAll('/','-').toLowerCase()
-
-podTemplate(label: 'nos-workspace-bootstrap', cloud: 'kubernetes', yaml: '''
-metadata:
-  labels:
-    jenkins.io/kind: build-pod
-spec:
-  serviceAccount: jenkins-operator-master
-  volumes:
-  - name: workspace-volume
-    emptyDir: {}
-  - name: maven-settings
-    secret:
-      secretName: jenkins-maven-settings
-  containers:
-  - name: jnlp
-    env:
-      - name: "JENKINS_TUNNEL"
-        value: "jenkins-operator-slave-master:50000"
-  - name: jx-base
-    env:
-      - name: "XDG_CONFIG_HOME"
-        value: "/home/jenkins"
-    image: gcr.io/jenkinsxio/builder-maven:latest
-    args:
-    - cat
-    command:
-    - /bin/sh
-    - -c
-    workingDir: /home/jenkins/agent
-    securityContext:
-      privileged: true
-    tty: true
-    resources:
-      requests:
-        cpu: .5
-        memory: .5Gi
-      limits:
-    volumeMounts:
-      - mountPath: /home/jenkins/.m2
-        name: maven-settings
-''') {
-    node('nos-workspace-bootstrap') {
-        stage('Claim workspace') {
-            container('jnlp') {
-                script {
-                    def scmvars = checkout scm: [
-                        $class: 'GitSCM',
-                        branches: scm.branches,
-                        doGenerateSubmoduleConfigurations: false,
-                        extensions: [[$class: 'SubmoduleOption',
-                                      disableSubmodules: false,
-                                      parentCredentials: true,
-                                      recursiveSubmodules: true,
-                                      reference: '',
-                                      trackingSubmodules: false]],
-                        submoduleCfg: [],
-                        userRemoteConfigs: scm.userRemoteConfigs
-                    ]
-                    println "scmvars: ${scmvars}"
-                    scmvars.each {key, val ->
-                        env.setProperty(key, val)
-                    }
-                }
-            }
-            container('jx-base') {
-                sh "make jenkins-slave~apply pipeline=resources version-branch=${BRANCH_NAME}"
-                env.setProperty('POD_TEMPLATE', readFile(file: ".local/var/deploy/slave/${workspace}-builder-pod.yaml"))
-            }
-        }
-    }
-}
+bootstrapTemplate = readTrusted('Jenkinsfile-pod.yaml')
+env.setProperty('POD_TEMPLATE', bootstrapTemplate)
 
 pipeline {
     options {
@@ -99,9 +29,8 @@ pipeline {
     agent {
         kubernetes {
             yamlMergeStrategy override()
-            workspaceVolume persistentVolumeClaimWorkspaceVolume(claimName: workspace+"-workspace", readOnly: false)
             yaml "${POD_TEMPLATE}"
-            defaultContainer 'builder'
+            defaultContainer 'maven'
         }
     }
     stages {
@@ -121,23 +50,22 @@ pipeline {
                     submoduleCfg: [],
                     userRemoteConfigs: scm.userRemoteConfigs
                 ]
-                sh "make jenkins-slave~apply pipeline=resources version-branch=${BRANCH_NAME} dry-run=client"
             }
         }
         stage('Build maven repository') {
             steps {
-                gitStatusWrapper(credentialsId: 'tekton-git',
+                gitStatusWrapper(credentialsId: 'pipeline-git-github',
                                  description: 'build maven repository',
                                  failureDescription: 'build maven repository',
                                  gitHubContext: 'maven-repository',
                                  successDescription: 'build maven repository') {
-                    sh 'make maven-repository'
+                    sh 'make maven~repository'
                 }
             }
         }
         // stage('Unit test reports') {
         //     steps {
-        //         gitStatusWrapper(credentialsId: 'tekton-git',
+        //         gitStatusWrapper(credentialsId: 'pipeline-git-github',
         //                          gitHubContext: 'unit-test-reports',
         //                          description: 'run unit tests and generate reports',
         //                          successDescription: 'run unit tests and generate reports',
@@ -155,22 +83,14 @@ pipeline {
         // }
         stage('Build maven artifacts') {
             steps {
-                gitStatusWrapper(credentialsId: 'tekton-git',
-                                 gitHubContext: 'maven-packages',
+                gitStatusWrapper(credentialsId: 'pipeline-git-github',
+                                 gitHubContext: 'maven-packages-and-deploy',
                                  description: 'build and deploy maven packages',
                                  successDescription: 'build and deploy maven packages',
                                  failureDescription: 'build and deploy maven packages') {
-                    sh 'make maven-packages-and-deploy'
+                    sh 'make maven~packages-and-deploy'
                 }
             }
-        }
-    }
-    post {
-        failure {
-             sh "make jenkins-slave~delete jenkins-slave~apply pipeline=snapshot"
-        }
-        always {
-            sh "make jenkins-slave~delete pipeline=resources"
         }
     }
 }
