@@ -35,6 +35,8 @@ maven~packages:
 maven~packages-and-deploy: ## deploy maven packages in nexus
 	$(cmd) $(args) deploy -DskipTest 
 
+maven~packages-and-deploy: online=true
+
 maven~test:
 	$(cmd) $(args) deploy test
 
