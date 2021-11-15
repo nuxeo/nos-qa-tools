@@ -27,11 +27,11 @@
     <module name="AvoidStarImport"/>
     <module name="RedundantImport"/>
     <module name="UnusedImports"/>
-    <module name="CustomImportOrder">
+    <!-- <module name="CustomImportOrder">
       <property name="customImportOrderRules" value="STATIC###STANDARD_JAVA_PACKAGE###SPECIAL_IMPORTS###THIRD_PARTY_PACKAGE"/>
       <property name="specialImportsRegExp" value="^org\."/>
       <property name="standardPackageRegExp" value="^(java|javax)\."/>
-    </module>
+    </module> -->
 
     <!-- Miscellaneous -->
     <module name="ArrayTypeStyle"/>
