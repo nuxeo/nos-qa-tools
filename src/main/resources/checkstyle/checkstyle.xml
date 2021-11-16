@@ -10,6 +10,12 @@
     <property name="fileExtensions" value="properties"/>
   </module>
 
+  <!-- Exceptions -->
+  <module name="SuppressionFilter">
+    <property name="file" value="${config_loc}/checkstyle-suppressions.xml"/>
+    <property name="optional" value="true"/>
+  </module>
+
   <!-- Java Files -->
   <module name="TreeWalker">
     <!-- File Headers -->
