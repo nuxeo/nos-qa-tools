@@ -20,7 +20,7 @@
   <module name="TreeWalker">
     <!-- File Headers -->
     <module name="Regexp">
-      <property name="format" value="\A\/\*$\r?\n \* \(C\) Copyright \d{4}(-\d{4})? Nuxeo (SA )?\(http:\/\/nuxeo\.com\/\)\.$\r?\n \* This is unpublished proprietary source code of Nuxeo SA\. All rights reserved\.$\r?\n \* Notice of copyright on this source code does not indicate publication\.$\r?\n \*$\r?\n \* Contributors:$" />
+      <property name="format" value="\A\/\*$\r?\n \* ©\d{4}(-\d{4})? Hyland Software, Inc\. and its affiliates\.All rights reserved.$\r?\n \* All Hyland product names are registered or unregistered trademarks of Hyland Software, Inc\. or its affiliates.$\r?\n \*$\r?\n \* Contributors:$" />
     </module>
 
     <!-- Class Design -->
