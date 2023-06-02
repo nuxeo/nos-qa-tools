@@ -1,0 +1,63 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  M2_SETTINGS: ${{ secrets.M2_YAYA_SETTINGS }}
+
+jobs:
+  publish-npm:
+    name: Publish module
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: repo checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.ref }} # Checkout pull request HEAD commit instead of merge commit
+          fetch-depth: 0 # Needed to calculate VERSION env variable
+
+      # Install zulu Java11
+      - name: Setup java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '11'
+          cache: maven
+      # Install maven with specific version
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@v4.5
+        with:
+          maven-version: 3.9.2
+
+      # Write m2 settings file with credentials for accessing
+      # private nexus repository.
+      - name: Override maven settings
+        shell: bash
+        run: echo $M2_SETTINGS > ~/.m2/settings.xml
+
+      # Define module version as a environment variable
+      - name: compute version from tag
+        if: ${{ contains(github.ref, 'refs/tags/v') }}
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: set version in pom.xml
+        run: |
+          mvn org.codehaus.mojo:versions-maven-plugin:set -DnewVersion=$VERSION
+
+      - name: publish on packages.nuxeo.com
+        if: ${{ contains(github.ref, 'refs/tags/v') }}
+        run: |
+          mvn clean deploy -DaltDeploymentRepository=packages.nuxeo.com::https://packages.nuxeo.com/repository/maven-nos-private/
+
+      - name: Start upterm session in case of failure
+        id: upterm
+        if: failure() && ( runner.debug || env.ACT )
+        uses: lhotari/action-upterm@v1
+        with:
+          limit-access-to-users: fbematol,yjulienne-nuxeo,nxmatic,Shubhamnuxeo
